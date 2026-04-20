@@ -6,9 +6,6 @@ using Microsoft.VisualStudio.Text.Formatting;
 using NubiloSoft.CoverageExt.Data;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Drawing.Drawing2D;
-using System.Drawing.Printing;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -16,8 +13,6 @@ using System.Windows.Media;
 
 namespace NubiloSoft.CoverageExt.CodeRendering
 {
-    
-
     public class CodeCoverage : IDisposable
     {
         internal IAdornmentLayer layer;
@@ -31,8 +26,12 @@ namespace NubiloSoft.CoverageExt.CodeRendering
         internal SolidColorBrush classicPenBrush;
         internal Pen coveredPen;
 
-        private EnvDTE.DTE dte;
-        private OutputWindow outputWindow;
+        internal SolidColorBrush partialCoveredBrush;
+        internal SolidColorBrush partialCoveredPenBrush;
+        internal Pen partialCoveredPen;
+
+        private readonly EnvDTE.DTE dte;
+        private readonly OutputWindow outputWindow;
 
         private readonly ITextDocumentFactoryService textDocumentFactory;
         private ITextDocument TextDocument;
@@ -41,7 +40,7 @@ namespace NubiloSoft.CoverageExt.CodeRendering
 
         private IFileCoverageData activeReport;
 
-        public CodeCoverage(IWpfTextView view, EnvDTE.DTE dte, ITextDocumentFactoryService textDocumentFactory )
+        public CodeCoverage(IWpfTextView view, EnvDTE.DTE dte, ITextDocumentFactoryService textDocumentFactory)
         {
             this.dte = dte;
             this.outputWindow = new OutputWindow(dte);
@@ -106,12 +105,12 @@ namespace NubiloSoft.CoverageExt.CodeRendering
         /// </summary>
         private void Instance_OnClean()
         {
-            ThreadHelper.JoinableTaskFactory.Run( async delegate ()
+            ThreadHelper.JoinableTaskFactory.Run(async delegate ()
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                
+
                 currentProfile = null;
-                activeReport   = null;
+                activeReport = null;
                 currentReportDate = DateTime.MinValue;
                 layer.RemoveAllAdornments();
 
@@ -168,12 +167,14 @@ namespace NubiloSoft.CoverageExt.CodeRendering
             var backgroundColor = VSColorTheme.GetThemedColor(EnvironmentColors.SystemWindowTextColorKey);
 
             System.Windows.Media.Color[] colors;
-            if( (backgroundColor.R + backgroundColor.G + backgroundColor.B) / 3 < 127 )
+            if ((backgroundColor.R + backgroundColor.G + backgroundColor.B) / 3 < 127)
             {
                 colors = new[] { Settings.Instance.UncoveredBrushColor,
                                  Settings.Instance.UncoveredPenColor,
                                  Settings.Instance.CoveredBrushColor,
-                                 Settings.Instance.CoveredPenColor
+                                 Settings.Instance.CoveredPenColor,
+                                 Settings.Instance.PartialCoveredBrushColor,
+                                 Settings.Instance.PartialCoveredPenColor,
                 };
             }
             else
@@ -181,7 +182,9 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                 colors = new[] { Settings.Instance.UncoveredDarkBrushColor,
                                  Settings.Instance.UncoveredDarkPenColor,
                                  Settings.Instance.CoveredDarkBrushColor,
-                                 Settings.Instance.CoveredDarkPenColor
+                                 Settings.Instance.CoveredDarkPenColor,
+                                 Settings.Instance.PartialCoveredDarkBrushColor,
+                                 Settings.Instance.PartialCoveredDarkPenColor
                 };
             }
 
@@ -213,6 +216,21 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                 coveredPenBrush.Freeze();
                 coveredPen = new Pen(coveredPenBrush, 0.5);
                 coveredPen.Freeze();
+            }
+
+            // Color for partial covered code:
+            if (partialCoveredBrush?.Color != colors[4])
+            {
+                partialCoveredBrush = new SolidColorBrush(colors[4]);
+                partialCoveredBrush.Freeze();
+            }
+
+            if (partialCoveredPenBrush?.Color != colors[2])
+            {
+                partialCoveredPenBrush = new SolidColorBrush(colors[5]);
+                partialCoveredPenBrush.Freeze();
+                partialCoveredPen = new Pen(partialCoveredPenBrush, 0.5);
+                partialCoveredPen.Freeze();
             }
 
             var penMediaColor = VSColorTheme.GetThemedColor(EnvironmentColors.SystemWindowTextColorKey);
@@ -252,18 +270,19 @@ namespace NubiloSoft.CoverageExt.CodeRendering
         private bool InitCurrent()
         {
             string activeFilename = GetActiveFilename();
-            if ( activeFilename == null ) return false;
+            if (activeFilename == null) return false;
 
             var dataProvider = ReportManagerSingleton.Instance(dte);
-            if ( dataProvider == null ) return false;
+            if (dataProvider == null) return false;
 
             var coverageData = dataProvider.UpdateData();
-            if ( coverageData == null ) return false;
+            if (coverageData == null) return false;
 
             DateTime activeFileLastWrite = File.GetLastWriteTimeUtc(activeFilename);
-            if ( coverageData.FileDate < activeFileLastWrite ) return false;
+            if (coverageData.FileDate < activeFileLastWrite) return false;
 
-            if ( currentReportDate == coverageData.FileDate ) {
+            if (currentReportDate == coverageData.FileDate)
+            {
                 return true;
             }
 
@@ -312,7 +331,7 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                         currentReportDate = DateTime.MinValue;
                         layer.RemoveAllAdornments();
                     }
-                }   
+                }
             }
             else
             {
@@ -415,17 +434,28 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                 {
                     var rectG = new RectangleGeometry(new Rect(g.Bounds.X, g.Bounds.Y, view.ViewportWidth, g.Bounds.Height));
 
-                    GeometryDrawing drawing = (covered == CoverageState.Covered) ?
-                        new GeometryDrawing(coveredBrush, coveredPen, rectG) :
-                        new GeometryDrawing(uncoveredBrush, uncoveredPen, rectG);
-
+                    GeometryDrawing drawing;
+                    switch (covered)
+                    {
+                        case CoverageState.Covered:
+                            drawing = new GeometryDrawing(coveredBrush, coveredPen, rectG);
+                            break;
+                        case CoverageState.Partially:
+                            drawing = new GeometryDrawing(partialCoveredBrush, partialCoveredPen, rectG);
+                            break;
+                        default:
+                            drawing = new GeometryDrawing(uncoveredBrush, uncoveredPen, rectG);
+                            break;
+                    }
                     drawing.Freeze();
 
                     DrawingImage drawingImage = new DrawingImage(drawing);
                     drawingImage.Freeze();
 
-                    Image image = new Image();
-                    image.Source = drawingImage;
+                    Image image = new Image
+                    {
+                        Source = drawingImage
+                    };
 
                     //Align the image with the top of the bounds of the text geometry
                     Canvas.SetLeft(image, rectG.Bounds.Left);
@@ -446,13 +476,15 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                         //if (x < view.ViewportWidth / 2) { x = view.ViewportWidth / 2; }
                         var rectCountG = new RectangleGeometry(new Rect(x, g.Bounds.Y, widthCount, g.Bounds.Height));
 
-                        Label lbl = new Label();
-                        lbl.FontSize = 8;
-                        lbl.Foreground = classicPenBrush;
-                        lbl.Background = Brushes.Transparent;
-                        lbl.FontFamily = new FontFamily("Verdana");
-                        lbl.FontWeight = FontWeights.Bold;
-                        lbl.Content = sb.ToString();
+                        Label lbl = new Label
+                        {
+                            FontSize = 8,
+                            Foreground = classicPenBrush,
+                            Background = Brushes.Transparent,
+                            FontFamily = new FontFamily("Verdana"),
+                            FontWeight = FontWeights.Bold,
+                            Content = sb.ToString()
+                        };
 
                         Canvas.SetLeft(lbl, rectCountG.Bounds.Left);
                         Canvas.SetTop(lbl, rectCountG.Bounds.Top);
@@ -462,7 +494,7 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                 }
             }
 
-            if(currentProfile != null)
+            if (currentProfile != null)
             {
                 var profile = currentProfile.Get(lineno);
                 if (profile != null && profile.Item1 != 0 || profile.Item2 != 0)
@@ -482,12 +514,14 @@ namespace NubiloSoft.CoverageExt.CodeRendering
                         if (x < view.ViewportWidth / 2) { x = view.ViewportWidth / 2; }
                         g = new RectangleGeometry(new Rect(x, g.Bounds.Y, 30, g.Bounds.Height));
 
-                        Label lbl = new Label();
-                        lbl.FontSize = 7;
-                        lbl.Foreground = Brushes.Black;
-                        lbl.Background = Brushes.Transparent;
-                        lbl.FontFamily = new FontFamily("Verdana");
-                        lbl.Content = sb.ToString();
+                        Label lbl = new Label
+                        {
+                            FontSize = 7,
+                            Foreground = Brushes.Black,
+                            Background = Brushes.Transparent,
+                            FontFamily = new FontFamily("Verdana"),
+                            Content = sb.ToString()
+                        };
 
                         Canvas.SetLeft(lbl, g.Bounds.Left);
                         Canvas.SetTop(lbl, g.Bounds.Top);

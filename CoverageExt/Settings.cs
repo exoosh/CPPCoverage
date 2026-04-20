@@ -9,8 +9,17 @@ namespace NubiloSoft.CoverageExt
     {
         Native,
         NativeV2,
-        //Cobertura,
+        Cobertura,
         //Clover
+    }
+
+    public enum CoverageVerbosity
+    {
+        Error,
+        Warning,
+        Info,
+        Trace,
+        None
     }
 
     public class Settings
@@ -53,7 +62,8 @@ namespace NubiloSoft.CoverageExt
         public event EventHandler OnSettingsChanged;
         public void TriggerSettingsChanged()
         {
-            if (propertyChanged) {
+            if (propertyChanged)
+            {
                 OnSettingsChanged?.Invoke(this, EventArgs.Empty);
                 propertyChanged = false;
             }
@@ -96,6 +106,14 @@ namespace NubiloSoft.CoverageExt
             get => this.compileBeforeRunning;
             set => SetField(ref compileBeforeRunning, value);
         }
+
+        private CoverageVerbosity verbosity = CoverageVerbosity.Info;
+        public CoverageVerbosity Verbosity
+        {
+            get => this.verbosity;
+            set => SetField(ref verbosity, value);
+        }
+
         #endregion
 
         #region Bright color definitions
@@ -126,6 +144,20 @@ namespace NubiloSoft.CoverageExt
             get => this.coveredPenColor;
             set => SetField(ref coveredPenColor, value);
         }
+
+        private Color partialCoveredBrushColor;
+        public Color PartialCoveredBrushColor
+        {
+            get => this.partialCoveredBrushColor;
+            set => SetField(ref partialCoveredBrushColor, value);
+        }
+
+        private Color partialCoveredPenColor = Color.FromArgb(0xD0, 0xBD, 0xFC, 0xBF);
+        public Color PartialCoveredPenColor
+        {
+            get => this.partialCoveredPenColor;
+            set => SetField(ref partialCoveredPenColor, value);
+        }
         #endregion
 
         #region Dark color definitions
@@ -155,6 +187,20 @@ namespace NubiloSoft.CoverageExt
         {
             get => this.coveredDarkPenColor;
             set => SetField(ref coveredDarkPenColor, value);
+        }
+
+        private Color partialCoveredDarkBrushColor;
+        public Color PartialCoveredDarkBrushColor
+        {
+            get => this.partialCoveredDarkBrushColor;
+            set => SetField(ref partialCoveredDarkBrushColor, value);
+        }
+
+        private Color partialCoveredDarkPenColor;
+        public Color PartialCoveredDarkPenColor
+        {
+            get => this.partialCoveredDarkPenColor;
+            set => SetField(ref partialCoveredDarkPenColor, value);
         }
         #endregion
 

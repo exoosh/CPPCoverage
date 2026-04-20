@@ -33,7 +33,7 @@ namespace TestFormat
 	{
 	public:
 
-		TEST_METHOD(Merge)
+		void MergeTest(const std::string dirName)
 		{
 			const auto max = FileCoverageV2::maskCount;
 			const auto c   = FileCoverageV2::maskIsCode;
@@ -52,13 +52,24 @@ namespace TestFormat
 				Assert::AreEqual(reference, merge._code);
 				Assert::AreEqual(coverage._nbLinesFile, merge._nbLinesFile);
 				Assert::AreEqual(coverage._nbLinesCode, merge._nbLinesCode);
-				Assert::AreEqual(5ull, merge._nbLinesCovered);
+				const size_t EXPECT_LINES_COVERED = 5;
+				Assert::AreEqual(EXPECT_LINES_COVERED, merge._nbLinesCovered);
 
 				// Write data
 				const std::string filename("demo");
 				std::stringstream ss;
 				merge.md5Code = "0123456789ABCDEFGHIJKLMNOPQRSTUV";
+				FileCoverageV2::writeHeader(ss);
+				if (!dirName.empty())
+				{
+					FileCoverageV2::openDirectory(ss, dirName);
+				}
 				merge.write(filename, ss);
+				if (!dirName.empty())
+				{
+					FileCoverageV2::closeDirectory(ss);
+				}
+				FileCoverageV2::writeFooter(ss);
 
 				// Create reader
 				auto options = RuntimeOptions::Instance();
@@ -66,22 +77,28 @@ namespace TestFormat
 				options.OutputFile   = filename; /// Dummy valid value
 				options.ExportFormat = RuntimeOptions::ExportFormatType::NativeV2;
 				MergeRunnerV2 runner(options);
-				auto contentClean = runner.clean(ss.str());
-				auto dict = runner.createDictionnary(filename, contentClean);
-				Assert::AreEqual(1ull, dict.size());
+				auto dict = runner.createDictionary(filename, ss);
+				const size_t EXPECT_DICT_SIZE = 1;
+				Assert::AreEqual(EXPECT_DICT_SIZE, dict.size());
 
-				// Check dictionary. Note the dictionary is now keyed by a
-				// lowercase/backslash-normalized path while the entry keeps
-				// the original casing for writeback.
-				const auto& savedEntry = dict[filename];
-				const auto& saved = savedEntry.coverage;
-				Assert::AreEqual(filename, savedEntry.writePath);
+				// Check dictionary
+				const auto& saved = dict[dirName][filename];
 				Assert::AreEqual(reference.size(), saved._code.size());
 				Assert::AreEqual(reference, saved._code);
 				Assert::AreEqual(merge._nbLinesFile,    saved._nbLinesFile);
 				Assert::AreEqual(merge._nbLinesCode,    saved._nbLinesCode);
 				Assert::AreEqual(merge._nbLinesCovered, saved._nbLinesCovered);
 			}
+		}
+
+		TEST_METHOD(MergeWithoutDirectory)
+		{
+			MergeTest("");
+		}
+
+		TEST_METHOD(MergeWithDirectory)
+		{
+			MergeTest("directoryName");
 		}
 	};
 }
