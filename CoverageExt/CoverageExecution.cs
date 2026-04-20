@@ -155,6 +155,7 @@ namespace NubiloSoft.CoverageExt
             if (!Settings.Instance.UseOpenCppCoverageRunner)
             {
                 //argumentBuilder.Append("-quiet "); // Not show info
+                argumentBuilder.Append("-consolidate ");
                 argumentBuilder.Append("-solution ");
                 argumentBuilder.Append(PathWithQuotes(solutionFolder.TrimEnd('\\', '/')));
                 argumentBuilder.Append(" -o ");
