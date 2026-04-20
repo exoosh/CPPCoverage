@@ -70,8 +70,12 @@ namespace TestFormat
 				auto dict = runner.createDictionnary(filename, contentClean);
 				Assert::AreEqual(1ull, dict.size());
 
-				// Check dictionary
-				const auto& saved = dict[filename];
+				// Check dictionary. Note the dictionary is now keyed by a
+				// lowercase/backslash-normalized path while the entry keeps
+				// the original casing for writeback.
+				const auto& savedEntry = dict[filename];
+				const auto& saved = savedEntry.coverage;
+				Assert::AreEqual(filename, savedEntry.writePath);
 				Assert::AreEqual(reference.size(), saved._code.size());
 				Assert::AreEqual(reference, saved._code);
 				Assert::AreEqual(merge._nbLinesFile,    saved._nbLinesFile);

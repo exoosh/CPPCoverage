@@ -364,6 +364,35 @@ struct FileCallbackInfo
 
 		FileCoverageV2::writeHeader(ofs);
 
+		// PDBs can legitimately report the same source file with different
+		// casings across translation units (e.g. "MyHeader.h" from one .cpp
+		// and "myheader.h" from another), because the case of #include paths
+		// is preserved verbatim in debug info. Since `lineData` is keyed by
+		// the case-sensitive string from SymEnumLines, each casing ends up as
+		// its own entry - each holding only the subset of lines registered
+		// under that casing.
+		//
+		// If we wrote them all out verbatim, downstream consumers (our C#
+		// loader, or a later -consolidate merge step) would normalize the
+		// path case-insensitively and then trip over the duplicates (our
+		// NativeV2Data.Parsing uses Dictionary<>.Add and throws on dupes).
+		//
+		// So: bucket by the case-folded output path first, merge the encoded
+		// coverage across colliding entries, then write one `<file>` per
+		// unique (case-insensitive) path.
+		struct MergedEntry
+		{
+			std::string writePath;   // preserve original casing for output
+			FileCoverageV2 coverage;
+		};
+		std::unordered_map<std::string, MergedEntry> byNormalizedPath;
+
+		const auto toLowerCopy = [](std::string s)
+		{
+			for (auto& c : s) { c = (char)std::tolower((unsigned char)c); }
+			return s;
+		};
+
 		for (auto& it : lineData)
 		{
 			auto filepath = it.first;
@@ -388,8 +417,35 @@ struct FileCallbackInfo
 			auto coverage = encodeCoverage(*it.second.get());
 			coverage.md5Code = md5.encode(it.first);
 
-			coverage.write(filepath, ofs);
+			std::string normKey = toLowerCopy(filepath);
+			auto found = byNormalizedPath.find(normKey);
+			if (found == byNormalizedPath.end())
+			{
+				byNormalizedPath.emplace(std::move(normKey),
+					MergedEntry{ std::move(filepath), std::move(coverage) });
+			}
+			else
+			{
+				// Combine hit counts from the sibling casing into the entry
+				// we already have. Sizes match because both encode the same
+				// underlying source file (relevant vector drives the size).
+				if (!found->second.coverage.merge(coverage))
+				{
+					if (!RuntimeOptions::Instance().Quiet)
+					{
+						std::cerr << "Warning: dropping case-variant coverage for "
+							<< filepath << " (size mismatch against "
+							<< found->second.writePath << ")" << std::endl;
+					}
+				}
+			}
 		}
+
+		for (const auto& kv : byNormalizedPath)
+		{
+			kv.second.coverage.write(kv.second.writePath, ofs);
+		}
+
 		FileCoverageV2::writeFooter(ofs);
 		ofs.close();
 	}

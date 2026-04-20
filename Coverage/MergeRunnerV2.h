@@ -19,7 +19,30 @@ class MergeRunnerV2 : public MergeRunner
 public:
     friend class TestFormat::TestNativeV2;
 private:
-    using DictCoverage = std::unordered_map<std::string, FileCoverageV2>;
+    // Each entry holds both the case-preserved path (what we write back to
+    // disk) and the accumulated coverage. The dictionary is keyed by a
+    // lowercased version of the path so that two .cov files that disagree on
+    // casing (e.g. a cross-bitness master/sibling pair, or a single runner
+    // whose PDB reported mixed casings) collapse into one entry instead of
+    // producing duplicates that downstream consumers reject.
+    struct CoverageEntry
+    {
+        std::string writePath;
+        FileCoverageV2 coverage;
+    };
+    using DictCoverage = std::unordered_map<std::string, CoverageEntry>;
+
+    static std::string normalizePathKey(const std::string& path)
+    {
+        std::string result(path.size(), '\0');
+        for (size_t i = 0; i < path.size(); ++i)
+        {
+            const char c = path[i];
+            result[i] = (c == '/') ? '\\'
+                : (char)std::tolower((unsigned char)c);
+        }
+        return result;
+    }
 
     std::string clean(const std::string& content) const
     {
@@ -70,7 +93,7 @@ private:
 				{
 					try
 					{
-						const auto filename = match.str(1);
+						const auto entryPath = match.str(1);
 
 						std::string values;
 						Base64::Decode(match.str(6), values);
@@ -84,7 +107,21 @@ private:
 						profile.md5Code = match.str(2);
 						std::memcpy(profile._code.data(), values.data(), values.size());
 
-						dictOutput[filename] = profile;
+						const auto key = normalizePathKey(entryPath);
+						auto existing = dictOutput.find(key);
+						if (existing == dictOutput.end())
+						{
+							dictOutput.emplace(key, CoverageEntry{ entryPath, std::move(profile) });
+						}
+						else if (!existing->second.coverage.merge(profile))
+						{
+							// Different line counts for the same (case-insensitive)
+							// source path: keep whichever one we saw first, since
+							// we can't sensibly reconcile them.
+							std::cerr << "Merge warning: case-variant of "
+								<< existing->second.writePath
+								<< " has mismatched size; dropping " << entryPath << std::endl;
+						}
 					}
 					catch (const std::runtime_error& e)
 					{
@@ -102,24 +139,22 @@ private:
 
     void merge(const DictCoverage& dictOutput, DictCoverage& dictMerge)
     {
-        auto itOutput = dictOutput.cbegin();
-        while(itOutput != dictOutput.cend())
+        for (const auto& kv : dictOutput)
         {
-            auto itMerge = dictMerge.find(itOutput->first);
-            if(itMerge != dictMerge.end())
+            auto itMerge = dictMerge.find(kv.first);
+            if (itMerge != dictMerge.end())
             {
-                if(!itMerge->second.merge(itOutput->second))
-			    {
-				    // Source is different from both version ?
-				    std::cerr << "Merge warning: impossible to merge " << itMerge->first << ": size between src/dst is not same." << std::endl;
-			    }
+                if (!itMerge->second.coverage.merge(kv.second.coverage))
+                {
+                    std::cerr << "Merge warning: impossible to merge "
+                        << itMerge->second.writePath
+                        << ": size between src/dst is not same." << std::endl;
+                }
             }
             else
             {
-                dictMerge[itOutput->first] = itOutput->second;
+                dictMerge.emplace(kv.first, kv.second);
             }
-
-            ++itOutput;
         }
     }
 
@@ -165,9 +200,9 @@ public:
 
         FileCoverageV2::writeHeader(ofs);
 
-        for(const auto& cover : dictMerge)
+        for (const auto& cover : dictMerge)
         {
-            cover.second.write(cover.first, ofs);
+            cover.second.coverage.write(cover.second.writePath, ofs);
         }
 
         FileCoverageV2::writeFooter(ofs);

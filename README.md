@@ -142,6 +142,11 @@ In fact, our Coverage engine measures this and emits 'p' for 'partial coverage' 
 
 So... in short: if a template specialization is hit, we'll mark the line as green, regardless if all possible template arguments are tested or not.
 
+# Crossing x86 and x64 boundaries
+
+Particularly nasty is the fact that nowadays test runners start in -say- x64 and then spawn x86 child processes. Don't worry, we've got you covered. The coverage runner 
+automatically detects this and spawns his friend specially built for the other architecture. 
+
 # License
 
 Your friendly BSD license. Please give credits where credits are deserved.
