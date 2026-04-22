@@ -14,7 +14,7 @@ namespace TestFormat
   class TestNativeV2;
 }
 
-class MergeRunnerV2 : public MergeRunner
+class MergeRunnerV2 : public IMergeRunner
 {
 public:
   friend class TestFormat::TestNativeV2;
@@ -182,44 +182,22 @@ private:
   }
 
 public:
-  /// Constructor
-  /// \param[in] opts: application option. Need MergedOutput and OutputFile valid and defined + ExportFormat MUST BE Native.
-  MergeRunnerV2(const RuntimeOptions& opts) :
-    MergeRunner(opts)
-  {
-    assert(_options.ExportFormat == RuntimeOptions::NativeV2); // Support only this !
-  }
+  explicit MergeRunnerV2()
+  {}
 
   /// Run merge
-  void execute() override
+  void merge(const std::string& mergedFile, const std::string& outputFile) override
   {
-    std::filesystem::path outputPath(_options.OutputFile);
-    std::filesystem::path mergedPath(_options.MergedOutput);
-
-    // Check we have data
-    if (!std::filesystem::exists(outputPath))
-    {
-      const std::string msg = "Merge failure: Impossible to find output file: " + _options.OutputFile;
-      throw std::exception(msg.c_str());
-    }
-
-    // Nothing to merge = Copy and quit
-    if (!std::filesystem::exists(mergedPath))
-    {
-      std::filesystem::copy(outputPath, mergedPath);
-      return;
-    }
-
     // ---- Make merge ---------------------------------------------------------------
     // Step 1: Parse output files and define a dictionary
-    DictCoverage dictOutput = makeDictionary(_options.OutputFile);
-    DictCoverage dictMerge = makeDictionary(_options.MergedOutput);
+    DictCoverage dictOutput = makeDictionary(outputFile);
+    DictCoverage dictMerge = makeDictionary(mergedFile);
 
     // Step 2: Parse merge
     merge(dictOutput, dictMerge);
 
     // Step 3: Write dictionary (on empty file)
-    std::ofstream ofs(_options.MergedOutput);
+    std::ofstream ofs(mergedFile);
 
     FileCoverageV2::writeHeader(ofs);
 
