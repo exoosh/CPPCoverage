@@ -82,7 +82,36 @@ namespace NubiloSoft.CoverageExt.Native
             }
         }
 
-        public void Parsing( string filename )
+        // Duplicate-key handling mirrors NativeV2Data: tolerate multiple
+        // FILE entries that normalize to the same path (e.g. case variants
+        // from mixed-casing PDB records, or legacy .cov files from older
+        // builds) by keeping whichever entry reports more covered lines.
+        private void AddOrReplace(string key, FileCoverageData data)
+        {
+            if (lookup.TryGetValue(key, out var existing))
+            {
+                int existingCovered = 0;
+                foreach (var v in existing.vector.Enumerate())
+                {
+                    if (v.Value) existingCovered++;
+                }
+                int newCovered = 0;
+                foreach (var v in data.vector.Enumerate())
+                {
+                    if (v.Value) newCovered++;
+                }
+                if (newCovered > existingCovered)
+                {
+                    lookup[key] = data;
+                }
+            }
+            else
+            {
+                lookup.Add(key, data);
+            }
+        }
+
+        public void Parsing(string filename)
         {
             // Get file date (for modified checks)
             FileDate = new System.IO.FileInfo(filename).LastWriteTimeUtc;
@@ -156,11 +185,11 @@ namespace NubiloSoft.CoverageExt.Native
                             else
                             {
                                 name = prof;
-                                lookup.Add(currentFile.ToLower(), new FileCoverageData(currentVector, currentProfile));
+                                AddOrReplace(currentFile.ToLower(), new FileCoverageData(currentVector, currentProfile));
                                 continue;
                             }
 
-                            lookup.Add(currentFile.ToLower(), new FileCoverageData(currentVector, currentProfile));
+                            AddOrReplace(currentFile.ToLower(), new FileCoverageData(currentVector, currentProfile));
                         }
                     }
                     // otherwise: ignore; grab next line
