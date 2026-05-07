@@ -155,7 +155,7 @@ automatically detects this and spawns his friend specially built for the other a
 
 # Support this project
 
-Creating and maintaining all my open-source projects takes a lot of time and money. If this plugin saved you an evening of nudging labels around, please consider supporting it:
+Creating and maintaining all my open-source projects takes a lot of time and money. If this plugin saved you an evening of debugging or thousands of euro's for a commercial tool, please consider supporting it so we can continue our work:
 
 <p align="center">
   <a href="https://www.paypal.com/donate/?hosted_button_id=5SZAYVTQFJDBE">
