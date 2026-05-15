@@ -152,7 +152,7 @@ private:
     return dictOutput;
   }
 
-  void merge(const DictCoverage& dictOutput, DictCoverage& dictMerge)
+  void merge(const DictCoverage& dictOutput)
   {
     auto itDirOutput = dictOutput.cbegin();
     while (itDirOutput != dictOutput.cend())
@@ -181,45 +181,40 @@ private:
     }
   }
 
+  DictCoverage dictMerge;
 public:
   explicit MergeRunnerV2()
   {}
 
-  /// Run merge
   void merge(const std::string& mergedFile, const std::string& outputFile) override
   {
-    // ---- Make merge ---------------------------------------------------------------
-    // Step 1: Parse output files and define a dictionary
+    dictMerge = makeDictionary(mergedFile);
     DictCoverage dictOutput = makeDictionary(outputFile);
-    DictCoverage dictMerge = makeDictionary(mergedFile);
 
-    // Step 2: Parse merge
-    merge(dictOutput, dictMerge);
+    merge(dictOutput);
+  }
 
-    // Step 3: Write dictionary (on empty file)
-    std::ofstream ofs(mergedFile);
-
-    FileCoverageV2::writeHeader(ofs);
+  void saveResultToStream(std::ostream& outputStream) override
+  {
+    FileCoverageV2::writeHeader(outputStream);
 
     for (const auto& directories : dictMerge)
     {
       const auto& dirName = directories.first;
       if (!dirName.empty())
       {
-        FileCoverageV2::openDirectory(ofs, dirName);
+        FileCoverageV2::openDirectory(outputStream, dirName);
       }
       for (const auto& cover : directories.second)
       {
-        cover.second.write(cover.first, ofs);
+        cover.second.write(cover.first, outputStream);
       }
       if (!dirName.empty())
       {
-        FileCoverageV2::closeDirectory(ofs);
+        FileCoverageV2::closeDirectory(outputStream);
       }
     }
 
-    FileCoverageV2::writeFooter(ofs);
-
-    ofs.close();
+    FileCoverageV2::writeFooter(outputStream);
   }
 };

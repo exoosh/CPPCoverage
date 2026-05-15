@@ -9,6 +9,7 @@ class IMergeRunner
 {
 public:
   virtual void merge(const std::string& mergedFile, const std::string& outputFile) = 0;
+  virtual void saveResultToStream(std::ostream& outputStream) = 0;
 };
 
 class MergeRunner

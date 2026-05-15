@@ -1,9 +1,9 @@
 #pragma once
 
 #include "MergeRunner.h"
+#include "FileSystem.h"
 
 #include <filesystem>
-#include <fstream>
 #include <map>
 #include <iostream>
 
@@ -22,15 +22,15 @@ private:
   {
     DictCoverage dictOutput;
 
-    std::fstream outputFile(filename.c_str(), std::fstream::in);
-    if (!outputFile.is_open())
+    auto file = FileSystem::OpenFile(filename);
+    if (!file->IsOpen())
     {
       const std::string msg = "Merge failure: Impossible to open file: " + filename;
       throw std::exception(msg.c_str());
     }
 
     std::string buffer;
-    while (std::getline(outputFile, buffer))
+    while (file->ReadLine(buffer))
     {
       //Search FILE:
       if (buffer.find_first_of("FILE:") != std::string::npos)
@@ -40,22 +40,22 @@ private:
         Profile profile;
 
         // Read next line (we suppose file is not corrupt)
-        std::getline(outputFile, buffer);
+        file->ReadLine(buffer);
         assert(buffer.find_first_of("RES:") != std::string::npos);
         profile.res = buffer.substr(5);
 
-        std::getline(outputFile, buffer);
+        file->ReadLine(buffer);
         assert(buffer.find_first_of("PROF:") != std::string::npos);
         profile.prof = buffer.substr(6);
 
         dictOutput[filename] = profile;
       }
     }
-    outputFile.close();
+
     return dictOutput;
   }
 
-  void merge(const DictCoverage& dictOutput, DictCoverage& dictMerge)
+  void merge(const DictCoverage& dictOutput)
   {
     auto itOutput = dictOutput.cbegin();
     while (itOutput != dictOutput.cend())
@@ -90,29 +90,26 @@ private:
     }
   }
 
+  DictCoverage dictMerge;
 public:
   explicit MergeRunnerV1()
   {}
 
-  /// Run merge
   void merge(const std::string& mergedFile, const std::string& outputFile) override
   {
-    // ---- Make merge ---------------------------------------------------------------
-    // Step 1: Parse output files and define a dictionary
+    dictMerge = makeDictionary(mergedFile);
     DictCoverage dictOutput = makeDictionary(outputFile);
-    DictCoverage dictMerge = makeDictionary(mergedFile);
 
-    // Step 2: Parse merge
-    merge(dictOutput, dictMerge);
+    merge(dictOutput);
+  }
 
-    // Step 3: Write dictionary (on empty file)
-    std::fstream mergeFile(mergedFile.c_str(), std::fstream::out);
+  void saveResultToStream(std::ostream& outputStream) override
+  {
     for (const auto& cover : dictMerge)
     {
-      mergeFile << "FILE: " << cover.first << std::endl;
-      mergeFile << "RES: " << cover.second.res << std::endl;
-      mergeFile << "PROF: " << cover.second.prof << std::endl;
+      outputStream << "FILE: " << cover.first << std::endl;
+      outputStream << "RES: " << cover.second.res << std::endl;
+      outputStream << "PROF: " << cover.second.prof << std::endl;
     }
-    mergeFile.close();
   }
 };

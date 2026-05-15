@@ -41,5 +41,11 @@ void MergeRunner::execute()
     return;
   }
 
+  // ---- Make merge ---------------------------------------------------------------
+  // Step 1: Merge two output
   runner->merge(options.MergedOutput, options.OutputFile);
+
+  // Step 2: Write result to file
+  std::ofstream mergeFile(options.MergedOutput.c_str());
+  runner->saveResultToStream(mergeFile);
 }
