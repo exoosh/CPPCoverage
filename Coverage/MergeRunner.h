@@ -5,29 +5,26 @@
 #include <cassert>
 #include <memory>
 
+class IMergeRunner
+{
+public:
+  virtual void merge(const std::string& mergedFile, const std::string& outputFile) = 0;
+  virtual void saveResultToStream(std::ostream& outputStream) = 0;
+};
+
 class MergeRunner
 {
-protected:
-  RuntimeOptions _options;    ///< Copy local of option.
+public:
+  /// Constructor
+  /// \param[in] opts: application option. Need MergedOutput and OutputFile valid and defined + ExportFormat MUST BE Native.
+  explicit MergeRunner(const RuntimeOptions& opts);
 
   // Avoid copy constructor
   MergeRunner(const MergeRunner&) = delete;
 
-  /// Constructor
-  /// \param[in] opts: application option. Need MergedOutput and OutputFile valid and defined + ExportFormat MUST BE Native.
-  MergeRunner(const RuntimeOptions& opts) :
-    _options(opts)
-  {
-    assert(!_options.MergedOutput.empty());
-    assert(!_options.OutputFile.empty());
-  }
-
-public:
-  virtual ~MergeRunner() = default;
-
   /// Run merge
-  virtual void execute() = 0;
-
-  // Allow to build good merge runner
-  static std::unique_ptr<MergeRunner> createMergeRunner(const RuntimeOptions& opts);
+  void execute();
+private:
+  const RuntimeOptions& options;
+  std::unique_ptr<IMergeRunner> runner;
 };
